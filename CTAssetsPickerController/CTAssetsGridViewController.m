@@ -302,35 +302,28 @@ NSString * const CTAssetsGridViewFooterIdentifier = @"CTAssetsGridViewFooterIden
 
 - (void)photoLibraryDidChange:(PHChange *)changeInstance
 {
-    // Call might come on any background queue. Re-dispatch to the main queue to handle it.
     dispatch_async(dispatch_get_main_queue(), ^{
         
         PHFetchResultChangeDetails *changeDetails = [changeInstance changeDetailsForFetchResult:self.fetchResult];
-        
-        if (changeDetails)
-        {
-            self.fetchResult = changeDetails.fetchResultAfterChanges;
+        if (changeDetails) {
+            
+            self.fetchResult = [changeDetails fetchResultAfterChanges];
             
             UICollectionView *collectionView = self.collectionView;
             
-            if (!changeDetails.hasIncrementalChanges || changeDetails.hasMoves)
-            {
-                [collectionView reloadData];
-                [self resetCachedAssetImages];
-            }
-            else
-            {
+            if ([changeDetails hasIncrementalChanges]) {
+                
                 NSArray *removedPaths;
                 NSArray *insertedPaths;
                 NSArray *changedPaths;
                 
-                NSIndexSet *removedIndexes = changeDetails.removedIndexes;
+                NSIndexSet *removedIndexes = [changeDetails removedIndexes];
                 removedPaths = [removedIndexes ctassetsPickerIndexPathsFromIndexesWithSection:0];
                 
-                NSIndexSet *insertedIndexes = changeDetails.insertedIndexes;
+                NSIndexSet *insertedIndexes = [changeDetails insertedIndexes];
                 insertedPaths = [insertedIndexes ctassetsPickerIndexPathsFromIndexesWithSection:0];
                 
-                NSIndexSet *changedIndexes = changeDetails.changedIndexes;
+                NSIndexSet *changedIndexes = [changeDetails changedIndexes];
                 changedPaths = [changedIndexes ctassetsPickerIndexPathsFromIndexesWithSection:0];
                 
                 BOOL shouldReload = NO;
@@ -359,27 +352,33 @@ NSString * const CTAssetsGridViewFooterIdentifier = @"CTAssetsGridViewFooterIden
                 }
                 else
                 {
-                    // if we have incremental diffs, tell the collection view to animate insertions and deletions
                     [collectionView performBatchUpdates:^{
-                        if (removedPaths.count)
-                        {
-                            [collectionView deleteItemsAtIndexPaths:[removedIndexes ctassetsPickerIndexPathsFromIndexesWithSection:0]];
+                        if (removedPaths) {
+                            [collectionView deleteItemsAtIndexPaths:removedPaths];
                         }
                         
-                        if (insertedPaths.count)
-                        {
-                            [collectionView insertItemsAtIndexPaths:[insertedIndexes ctassetsPickerIndexPathsFromIndexesWithSection:0]];
+                        if (insertedPaths) {
+                            [collectionView insertItemsAtIndexPaths:insertedPaths];
                         }
                         
-                        if (changedPaths.count)
-                        {
-                            [collectionView reloadItemsAtIndexPaths:[changedIndexes ctassetsPickerIndexPathsFromIndexesWithSection:0] ];
+                        if (changedPaths) {
+                            [collectionView reloadItemsAtIndexPaths:changedPaths];
                         }
-                    } completion:^(BOOL finished){
-                        if (finished)
-                            [self resetCachedAssetImages];
-                    }];
+                        
+                        if ([changeDetails hasMoves]) {
+                            [changeDetails enumerateMovesWithBlock:^(NSUInteger fromIndex, NSUInteger toIndex) {
+                                NSIndexPath *fromIndexPath = [NSIndexPath indexPathForItem:fromIndex inSection:0];
+                                NSIndexPath *toIndexPath = [NSIndexPath indexPathForItem:toIndex inSection:0];
+                                [collectionView moveItemAtIndexPath:fromIndexPath toIndexPath:toIndexPath];
+                            }];
+                        }
+                        
+                    } completion:NULL];
                 }
+                
+                [self resetCachedAssetImages];
+            } else {
+                [collectionView reloadData];
             }
             
             [self.footer bind:self.fetchResult];
